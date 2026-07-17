@@ -887,6 +887,10 @@ td small { display: block; margin-top: .1rem; color: var(--text-muted); font-siz
 .globe-tooltip strong { display: block; font-size: .82rem; }
 .globe-tooltip span { font-size: .72rem; color: #b6c6d6; }
 
+/* Banderas reales (flagcdn) escaladas por font-size del contenedor */
+.flag-img { height: 1em; width: auto; display: inline-block; vertical-align: middle; border-radius: .1em; box-shadow: 0 .05em .18em rgba(0,0,0,.55); object-fit: cover; }
+.card-flag .flag-img, .question-flag .flag-img, .guided-flag .flag-img { border-radius: .06em; }
+
 </style>
 </head>
 <body>
@@ -1410,7 +1414,8 @@ window.ATLAS_DATA = {"version":"1.0.0","fechaRevision":"15 de julio de 2026","co
   }
 
   function flagEmoji(iso2) {
-    return iso2.toUpperCase().replace(/./g, character => String.fromCodePoint(127397 + character.charCodeAt()));
+    const code = (iso2 || "").toLowerCase();
+    return `<img class="flag-img" src="https://flagcdn.com/${code}.svg" alt="" loading="lazy" onerror="this.remove()">`;
   }
 
   function seededRandom(seedText) {
@@ -2245,6 +2250,7 @@ window.ATLAS_DATA = {"version":"1.0.0","fechaRevision":"15 de julio de 2026","co
       map.addSource('capitals', { type: 'geojson', data: this.capitalsFC });
       map.addSource('labels', { type: 'geojson', data: this.labelsFC });
       map.addSource('conn', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      map.addSource('pick', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
       map.addLayer({
         id: 'country-fill', type: 'fill', source: 'countries',
@@ -2286,6 +2292,8 @@ window.ATLAS_DATA = {"version":"1.0.0","fechaRevision":"15 de julio de 2026","co
         paint: { 'text-color': '#ffffff', 'text-halo-color': 'rgba(3,10,20,0.92)', 'text-halo-width': 2, 'text-halo-blur': 0.4 }
       });
 
+      map.addLayer({ id: 'pick-halo', type: 'circle', source: 'pick', paint: { 'circle-radius': 14, 'circle-color': ['match', ['get', 'kind'], 'cap', 'rgba(52,211,153,.22)', 'rgba(255,90,122,.22)'], 'circle-stroke-color': ['match', ['get', 'kind'], 'cap', '#34d399', '#ff5a7a'], 'circle-stroke-width': 2 } });
+      map.addLayer({ id: 'pick-dot', type: 'circle', source: 'pick', paint: { 'circle-radius': 5.5, 'circle-color': ['match', ['get', 'kind'], 'cap', '#34d399', '#ff5a7a'], 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.6 } });
       // Interacciones
       map.on('mousemove', 'country-fill', e => {
         if (!e.features.length) return;
@@ -2306,6 +2314,7 @@ window.ATLAS_DATA = {"version":"1.0.0","fechaRevision":"15 de julio de 2026","co
       map.on('click', e => {
         if (this.interactionMode === 'pick-location') {
           this.dispatchEvent(new CustomEvent('location-pick', { detail: { lat: e.lngLat.lat, lon: e.lngLat.lng } }));
+          this._showPick([e.lngLat.lng, e.lngLat.lat]);
           return;
         }
         const feats = map.queryRenderedFeatures(e.point, { layers: ['country-fill'] });
@@ -2340,6 +2349,17 @@ window.ATLAS_DATA = {"version":"1.0.0","fechaRevision":"15 de julio de 2026","co
       tip.style.top = point.y + 'px';
     }
     _hideTooltip() { const tip = $('#globeTooltip'); if (tip) tip.hidden = true; }
+    _showPick(mark) {
+      if (!this.ready || !this.map.getSource('pick')) return;
+      const feats = [{ type: 'Feature', properties: { kind: 'mark' }, geometry: { type: 'Point', coordinates: mark } }];
+      const q = this.questionCountry;
+      if (q && q.__revealLocation) {
+        const cap = [q.coordenadasCapital[1], q.coordenadasCapital[0]];
+        feats.push({ type: 'Feature', properties: { kind: 'cap' }, geometry: { type: 'Point', coordinates: cap } });
+        this.map.getSource('conn')?.setData({ type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: [mark, cap] } }] });
+      }
+      this.map.getSource('pick').setData({ type: 'FeatureCollection', features: feats });
+    }
 
     // ---- API pública (compatible con la app) ----
     resize() { if (this.map) this.map.resize(); }
@@ -2455,7 +2475,7 @@ window.ATLAS_DATA = {"version":"1.0.0","fechaRevision":"15 de julio de 2026","co
         else if (mode === 'pick-location') status.textContent = 'Pregunta activa · marcá la ubicación aproximada';
         else status.textContent = this.available ? 'Globo satelital · arrastra para rotar, rueda para acercar' : 'Vista 2D accesible disponible';
       }
-      if (this.ready && this.map.getSource('conn')) this.map.getSource('conn').setData({ type: 'FeatureCollection', features: [] });
+      if (this.ready && this.map.getSource('conn')) { this.map.getSource('conn').setData({ type: 'FeatureCollection', features: [] }); this.map.getSource('pick')?.setData({ type: 'FeatureCollection', features: [] }); }
     }
 
     flash(type = 'correct') {
