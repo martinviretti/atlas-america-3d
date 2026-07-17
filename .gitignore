@@ -1,0 +1,4 @@
+tools/ne_*.geojson
+tools/*.bak*
+test-*.png
+node_modules/
